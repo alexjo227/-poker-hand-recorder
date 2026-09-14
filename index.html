@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Poker Hands">
+<title>Poker Hand Recorder</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#303541;--text:#f4f5f7;--muted:#aab0bb;--accent:#d7dde8;--accentText:#111318}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:760px;margin:auto;padding:calc(12px + env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom))}
+header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}
+h1{font-size:22px;margin:0}.sub{font-size:13px;color:var(--muted);margin-top:3px}
+.card{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:14px;margin:12px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.wrap{display:flex;flex-wrap:wrap;gap:8px}.label{font-size:13px;color:var(--muted);margin:8px 0 6px}
+input,textarea,button{font:inherit} input,textarea{width:100%;background:#101318;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:16px}
+textarea{resize:vertical} button{min-height:44px;border:1px solid var(--line);background:#1b1f27;color:var(--text);border-radius:10px;padding:9px 12px}
+button.sel{background:var(--accent);color:var(--accentText);border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accentText);font-weight:700}
+.small{font-size:13px}.muted{color:var(--muted)}.row{display:flex;gap:8px;align-items:center}
+.sticky-save{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom));padding-top:8px;background:linear-gradient(transparent,var(--bg) 28%)}
+pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0}
+.hidden{display:none}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}.grid4{grid-template-columns:repeat(4,minmax(0,1fr))}button{padding:9px 8px;font-size:14px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><h1>Poker Hand Recorder</h1><div class="sub">Fast tournament hand capture</div></div>
+  <button id="newHand">New</button>
+</header>
+
+<div class="card">
+  <div class="grid2">
+    <label><div class="label">Blinds / level</div><input id="blinds" placeholder="500/1k/1k"></label>
+    <label><div class="label">Effective stack (BB)</div><input id="effStack" type="number" inputmode="decimal" placeholder="40"></label>
+  </div>
+
+  <div class="label">Hero position</div><div id="heroPos" class="grid4"></div>
+  <div class="label">Villain position</div><div id="villainPos" class="grid4"></div>
+
+  <div class="grid2">
+    <label><div class="label">Villain stack (optional, BB)</div><input id="villainStack" type="number" inputmode="decimal" placeholder="32"></label>
+    <label><div class="label">Hero cards</div><input id="heroCards" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="Kc Qc"></label>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between"><strong>Preflop</strong><button id="clearPre" class="small">Clear</button></div>
+  <div class="label">Who acts?</div><div id="preActor" class="wrap"></div>
+  <div class="label">Action</div><div id="preQuick" class="wrap"></div>
+  <div class="label">Actions</div><textarea id="pre" rows="2"></textarea>
+</div>
+
+<div id="streetWrap"></div>
+
+<div class="card">
+  <div class="label">Villain hand (optional)</div>
+  <input id="villainHand" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="As Jh">
+</div>
+
+<div class="card">
+  <div class="label">Result</div><div id="results" class="wrap"></div>
+  <div class="label">Notes</div><textarea id="notes" rows="3" placeholder="Reads, timing tell, unusual line..."></textarea>
+  <label class="row" style="margin-top:12px"><input id="review" type="checkbox" style="width:auto"> Review later</label>
+</div>
+
+<div class="sticky-save"><button id="save" class="primary" style="width:100%">Save hand</button></div>
+<div id="status" class="small muted" style="margin:8px 2px"></div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <div><strong>Session hands</strong><div id="count" class="small muted">0 hands recorded</div></div>
+    <button id="export">Export</button>
+  </div>
+  <div id="hands" style="margin-top:10px"></div>
+  <textarea id="exportText" rows="10" readonly class="hidden" style="margin-top:10px"></textarea>
+</div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const positions=['UTG','UTG+1','HJ','CO','BTN','SB','BB','Other'];
+const betSizes=['25%','33%','50%','66%','75%','Pot','125%','200%','Jam'];
+const preActions=['Limp','Open 2x','Open 2.2x','Open 2.5x','Call','3-bet','4-bet','Jam','Fold'];
+const postActions=['checks','calls','bets','raises','folds','jams'];
+const resultList=['Won','Lost','Chopped','Folded before SD','Showdown'];
+let heroPos='', villainPos='', result='', preActor='Hero';
+const streetActors={flop:'Hero',turn:'Hero',river:'Hero'};
+let hands=[];
+try{hands=JSON.parse(localStorage.getItem('pokerHands')||'[]')}catch(e){hands=[]}
+
+function persist(){localStorage.setItem('pokerHands',JSON.stringify(hands))}
+function actorLabel(actor){return actor==='Hero'?(heroPos||'Hero'):(villainPos||'Villain')}
+function normalizeCards(v){
+  return v.replace(/[CDSHcdsh]/g,m=>m.toLowerCase()).replace(/[akqjt]/g,m=>m.toUpperCase());
+}
+function keepInView(el){
+  const go=()=>el.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});
+  setTimeout(go,120); setTimeout(go,450);
+}
+document.addEventListener('focusin',e=>{if(e.target.matches('input,textarea')) keepInView(e.target)});
+document.addEventListener('input',e=>{
+  if(e.target.classList.contains('cardInput')){
+    const p=e.target.selectionStart; e.target.value=normalizeCards(e.target.value);
+    try{e.target.setSelectionRange(p,p)}catch(_){}
+  }
+});
+function toggles(container,items,onPick){
+  items.forEach(item=>{
+    const b=document.createElement('button');b.type='button';b.textContent=item;
+    b.addEventListener('click',()=>{[...container.children].forEach(x=>x.classList.remove('sel'));b.classList.add('sel');onPick(item)});
+    container.appendChild(b);
+  });
+}
+toggles($('heroPos'),positions,x=>heroPos=x); toggles($('villainPos'),positions,x=>villainPos=x);
+function actorButtons(container,setter){
+  ['Hero','Villain'].forEach((who,i)=>{
+    const b=document.createElement('button');b.type='button';b.textContent=who;if(i===0)b.classList.add('sel');
+    b.addEventListener('click',()=>{[...container.children].forEach(x=>x.classList.remove('sel'));b.classList.add('sel');setter(who)});
+    container.appendChild(b);
+  });
+}
+actorButtons($('preActor'),x=>preActor=x);
+preActions.forEach(a=>{
+  const b=document.createElement('button');b.type='button';b.textContent=a;
+  b.addEventListener('click',()=>{$('pre').value+=($('pre').value?' · ':'')+actorLabel(preActor)+' '+a});
+  $('preQuick').appendChild(b);
+});
+$('clearPre').onclick=()=>{$('pre').value=''};
+
+function createStreet(name,id,placeholder){
+  const sec=document.createElement('div');sec.className='card';
+  sec.innerHTML=`<div class="row" style="justify-content:space-between"><strong>${name}</strong><button class="clear small">Clear</button></div>
+  <div class="label">${name} cards</div><input id="${id}Board" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="${placeholder}">
+  <div class="label">Who acts?</div><div class="actors wrap"></div>
+  <div class="label">Action</div><div class="acts wrap"></div>
+  <div class="label">Bet size</div><div class="sizes wrap"></div>
+  <div class="label">Actions</div><textarea id="${id}" rows="2"></textarea>`;
+  $('streetWrap').appendChild(sec);
+  const ta=$(id), board=$(id+'Board');
+  actorButtons(sec.querySelector('.actors'),x=>streetActors[id]=x);
+  postActions.forEach(a=>{const b=document.createElement('button');b.type='button';b.textContent=a;
+    b.onclick=()=>{ta.value+=(ta.value?' · ':'')+actorLabel(streetActors[id])+' '+a};sec.querySelector('.acts').appendChild(b)});
+  betSizes.forEach(s=>{const b=document.createElement('button');b.type='button';b.textContent=s;
+    b.onclick=()=>{ta.value+=' '+s};sec.querySelector('.sizes').appendChild(b)});
+  sec.querySelector('.clear').onclick=()=>{board.value='';ta.value=''};
+}
+createStreet('Flop','flop','Jh Td 7c'); createStreet('Turn','turn','5c'); createStreet('River','river','2s');
+toggles($('results'),resultList,x=>result=x);
+
+function txt(id){return $(id).value.trim()}
+function handText(h,i){
+  let out=`#${i} ${h.blinds?('Blinds '+h.blinds):'Hand'}${h.effStack?(' | '+h.effStack+'bb eff'):''}\n`;
+  out+=`Hero: ${h.heroPos||'?'} ${h.cards||''}${h.effStack?(' ('+h.effStack+'bb)'):''}\n`;
+  out+=`Villain: ${h.villainPos||'?'}${h.villainStack?(' ('+h.villainStack+'bb)'):''}\n`;
+  if(h.pre)out+=`Preflop: ${h.pre}\n`;
+  ['flop','turn','river'].forEach(s=>{if(h[s+'Board']||h[s])out+=`${s[0].toUpperCase()+s.slice(1)}${h[s+'Board']?' ['+h[s+'Board']+']':''}: ${h[s]||''}\n`});
+  if(h.villainHand)out+=`Villain hand: ${h.villainHand}\n`; if(h.result)out+=`Result: ${h.result}\n`;
+  if(h.notes)out+=`Notes: ${h.notes}\n`; if(h.review)out+='★ REVIEW';
+  return out.trim();
+}
+function render(){
+  $('hands').innerHTML=''; $('count').textContent=`${hands.length} hand${hands.length===1?'':'s'} recorded`;
+  hands.slice().reverse().forEach((h,r)=>{
+    const idx=hands.length-1-r;const a=document.createElement('div');a.className='card';
+    const p=document.createElement('pre');p.textContent=handText(h,idx+1);
+    const d=document.createElement('button');d.textContent='Delete';d.style.marginTop='10px';
+    d.onclick=()=>{hands.splice(idx,1);persist();render()};a.append(p,d);$('hands').appendChild(a);
+  });
+}
+function reset(){
+  ['blinds','effStack','villainStack','heroCards','pre','flopBoard','flop','turnBoard','turn','riverBoard','river','villainHand','notes'].forEach(id=>$(id).value='');
+  heroPos='';villainPos='';result='';preActor='Hero';streetActors.flop=streetActors.turn=streetActors.river='Hero';$('review').checked=false;
+  [$('heroPos'),$('villainPos'),$('results')].forEach(c=>[...c.children].forEach(b=>b.classList.remove('sel')));
+  [$('preActor'),...document.querySelectorAll('.actors')].forEach(g=>[...g.children].forEach((b,i)=>b.classList.toggle('sel',i===0)));
+}
+$('newHand').onclick=reset;
+$('save').onclick=()=>{
+  const h={blinds:txt('blinds'),effStack:txt('effStack'),villainStack:txt('villainStack'),heroPos,villainPos,cards:normalizeCards(txt('heroCards')),
+    pre:txt('pre'),flopBoard:normalizeCards(txt('flopBoard')),flop:txt('flop'),turnBoard:normalizeCards(txt('turnBoard')),turn:txt('turn'),
+    riverBoard:normalizeCards(txt('riverBoard')),river:txt('river'),villainHand:normalizeCards(txt('villainHand')),result,notes:txt('notes'),review:$('review').checked};
+  if(!h.cards&&!h.pre&&!h.flop&&!h.turn&&!h.river){$('status').textContent='Add cards or some action before saving.';return}
+  hands.push(h);persist();render();reset();$('status').textContent='Hand saved.';
+};
+$('export').onclick=()=>{
+  if(!hands.length){$('status').textContent='No hands to export.';return}
+  const area=$('exportText');area.value=hands.map((h,i)=>handText(h,i+1)).join('\n\n──────────\n\n');
+  area.classList.remove('hidden');area.focus();area.select();$('status').textContent='Export text selected.';
+};
+render();
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}
+</script>
+</body>
+</html>
