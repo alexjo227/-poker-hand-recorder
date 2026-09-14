@@ -1,4 +1,4 @@
-const CACHE = 'poker-hand-recorder-v3';
+const CACHE = 'poker-hand-recorder-v4';
 const ASSETS = ['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install', event => {

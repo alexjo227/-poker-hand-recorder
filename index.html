@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Poker Hands">
-<title>Poker Hand Recorder</title>
+<title>Poker Hand Recorder v4</title>
 <style>
 :root{--bg:#0f1115;--card:#171a21;--line:#303541;--text:#f4f5f7;--muted:#aab0bb;--accent:#d7dde8;--accentText:#111318}
 *{box-sizing:border-box}
@@ -106,6 +106,27 @@ const resultList=['Won','Lost','Chopped','Folded before SD','Showdown'];
 let heroPos='', villainPos='', result='', preActor='Hero';
 const savedBlinds=localStorage.getItem('pokerLastBlinds')||'';
 const streetActors={flop:'Hero',turn:'Hero',river:'Hero'};
+const postflopOrder=['SB','BB','UTG','UTG+1','HJ','CO','BTN'];
+
+function firstPostflopActor(){
+  const h=postflopOrder.indexOf(heroPos);
+  const v=postflopOrder.indexOf(villainPos);
+  if(h===-1 || v===-1 || h===v) return 'Hero';
+  return h < v ? 'Hero' : 'Villain';
+}
+
+function setActorGroup(container,who){
+  [...container.children].forEach((b,i)=>{
+    b.classList.toggle('sel',(i===0&&who==='Hero')||(i===1&&who==='Villain'));
+  });
+}
+
+function syncStreetActorsToPosition(){
+  const first=firstPostflopActor();
+  ['flop','turn','river'].forEach(id=>streetActors[id]=first);
+  document.querySelectorAll('.actors').forEach(group=>setActorGroup(group,first));
+}
+
 let hands=[];
 try{hands=JSON.parse(localStorage.getItem('pokerHands')||'[]')}catch(e){hands=[]}
 $('blinds').value=savedBlinds;
@@ -180,7 +201,7 @@ function toggles(container,items,onPick){
     container.appendChild(b);
   });
 }
-toggles($('heroPos'),positions,x=>heroPos=x); toggles($('villainPos'),positions,x=>villainPos=x);
+toggles($('heroPos'),positions,x=>{heroPos=x;syncStreetActorsToPosition()}); toggles($('villainPos'),positions,x=>{villainPos=x;syncStreetActorsToPosition()});
 function actorButtons(container,setter){
   ['Hero','Villain'].forEach((who,i)=>{
     const b=document.createElement('button');b.type='button';b.textContent=who;if(i===0)b.classList.add('sel');
@@ -210,6 +231,8 @@ function createStreet(name,id,placeholder){
   $('streetWrap').appendChild(sec);
   const ta=$(id), board=$(id+'Board');
   actorButtons(sec.querySelector('.actors'),x=>streetActors[id]=x);
+  streetActors[id]=firstPostflopActor();
+  setActorGroup(sec.querySelector('.actors'),streetActors[id]);
   postActions.forEach(a=>{const b=document.createElement('button');b.type='button';b.textContent=a;
     b.onclick=()=>{
       ta.value+=(ta.value?' · ':'')+actorLabel(streetActors[id])+' '+a;
