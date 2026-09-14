@@ -1,6 +1,6 @@
-Poker Hand Recorder v2
-Changes:
-- Tap-based card entry for Hero, Flop, Turn, River, and Villain hand
-- Automatic Hero/Villain actor switching after each recorded action
-- Stack presets: 10, 15, 20, 25, 30, 40, 50, 75, 100 BB
-- Blind level is remembered after saving/resetting and across launches
+Poker Hand Recorder v3
+- Keeps all v2 workflow improvements.
+- Fixes Home Screen / Safari update caching.
+- Automatically removes old app caches.
+- Uses network-first loading for the main app when online.
+- Still falls back to the cached app when offline.
