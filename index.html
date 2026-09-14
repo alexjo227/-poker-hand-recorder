@@ -29,6 +29,16 @@ button.primary{background:var(--accent);color:var(--accentText);font-weight:700}
 pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0}
 .hidden{display:none}
 @media(max-width:560px){.grid2{grid-template-columns:1fr}.grid4{grid-template-columns:repeat(4,minmax(0,1fr))}button{padding:9px 8px;font-size:14px}}
+
+.card-picker{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#101318}
+.rank-row,.suit-row,.preset-row{display:grid;gap:6px}
+.rank-row{grid-template-columns:repeat(7,minmax(0,1fr));margin-bottom:6px}
+.suit-row{grid-template-columns:repeat(6,minmax(0,1fr))}
+.card-picker button,.preset-row button{min-height:40px;padding:6px 4px;font-size:14px}
+.card-picker button.pending{background:var(--accent);color:var(--accentText);border-color:var(--accent)}
+.preset-row{grid-template-columns:repeat(5,minmax(0,1fr));margin-top:8px}
+@media(min-width:650px){.rank-row{grid-template-columns:repeat(13,minmax(0,1fr))}.preset-row{grid-template-columns:repeat(9,minmax(0,1fr))}}
+
 </style>
 </head>
 <body>
@@ -41,15 +51,15 @@ pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe 
 <div class="card">
   <div class="grid2">
     <label><div class="label">Blinds / level</div><input id="blinds" placeholder="500/1k/1k"></label>
-    <label><div class="label">Effective stack (BB)</div><input id="effStack" type="number" inputmode="decimal" placeholder="40"></label>
+    <label><div class="label">Effective stack (BB)</div><input id="effStack" type="number" inputmode="decimal" placeholder="40"><div id="effStackPresets"></div></label>
   </div>
 
   <div class="label">Hero position</div><div id="heroPos" class="grid4"></div>
   <div class="label">Villain position</div><div id="villainPos" class="grid4"></div>
 
   <div class="grid2">
-    <label><div class="label">Villain stack (optional, BB)</div><input id="villainStack" type="number" inputmode="decimal" placeholder="32"></label>
-    <label><div class="label">Hero cards</div><input id="heroCards" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="Kc Qc"></label>
+    <label><div class="label">Villain stack (optional, BB)</div><input id="villainStack" type="number" inputmode="decimal" placeholder="32"><div id="villainStackPresets"></div></label>
+    <label><div class="label">Hero cards</div><input id="heroCards" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="Kc Qc"><div id="heroCardsPicker"></div></label>
   </div>
 </div>
 
@@ -64,7 +74,7 @@ pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe 
 
 <div class="card">
   <div class="label">Villain hand (optional)</div>
-  <input id="villainHand" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="As Jh">
+  <input id="villainHand" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="As Jh"><div id="villainHandPicker"></div>
 </div>
 
 <div class="card">
@@ -94,14 +104,63 @@ const preActions=['Limp','Open 2x','Open 2.2x','Open 2.5x','Call','3-bet','4-bet
 const postActions=['checks','calls','bets','raises','folds','jams'];
 const resultList=['Won','Lost','Chopped','Folded before SD','Showdown'];
 let heroPos='', villainPos='', result='', preActor='Hero';
+const savedBlinds=localStorage.getItem('pokerLastBlinds')||'';
 const streetActors={flop:'Hero',turn:'Hero',river:'Hero'};
 let hands=[];
 try{hands=JSON.parse(localStorage.getItem('pokerHands')||'[]')}catch(e){hands=[]}
+$('blinds').value=savedBlinds;
+$('blinds').addEventListener('input',()=>localStorage.setItem('pokerLastBlinds',$('blinds').value));
 
 function persist(){localStorage.setItem('pokerHands',JSON.stringify(hands))}
 function actorLabel(actor){return actor==='Hero'?(heroPos||'Hero'):(villainPos||'Villain')}
 function normalizeCards(v){
   return v.replace(/[CDSHcdsh]/g,m=>m.toLowerCase()).replace(/[akqjt]/g,m=>m.toUpperCase());
+}
+
+function parseCards(v){
+  const m=(v||'').match(/(?:10|[2-9TJQKA])[cdhs]/gi)||[];
+  return m.map(x=>x.replace(/^10/i,'T').replace(/[akqjt]/i,r=>r.toUpperCase()).replace(/[CDSH]/g,s=>s.toLowerCase()));
+}
+function makeCardPicker(inputId, hostId, maxCards){
+  const input=$(inputId), host=$(hostId); if(!input||!host)return;
+  host.className='card-picker';
+  const rankRow=document.createElement('div'); rankRow.className='rank-row';
+  const suitRow=document.createElement('div'); suitRow.className='suit-row';
+  let pending='';
+  const ranks=['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
+  const suits=[['♣','c'],['♦','d'],['♥','h'],['♠','s']];
+  function refresh(){[...rankRow.children].forEach(b=>b.classList.toggle('pending',b.dataset.rank===pending))}
+  ranks.forEach(r=>{
+    const b=document.createElement('button'); b.type='button'; b.textContent=r; b.dataset.rank=r;
+    b.onclick=()=>{pending=r;refresh()}; rankRow.appendChild(b);
+  });
+  suits.forEach(([sym,s])=>{
+    const b=document.createElement('button'); b.type='button'; b.textContent=sym;
+    b.onclick=()=>{
+      if(!pending)return;
+      const cards=parseCards(input.value); if(cards.length>=maxCards)return;
+      cards.push(pending+s); input.value=cards.join(' '); pending=''; refresh();
+    };
+    suitRow.appendChild(b);
+  });
+  const back=document.createElement('button'); back.type='button'; back.textContent='⌫';
+  back.onclick=()=>{const cards=parseCards(input.value);cards.pop();input.value=cards.join(' ');pending='';refresh()};
+  const clear=document.createElement('button'); clear.type='button'; clear.textContent='Clear';
+  clear.onclick=()=>{input.value='';pending='';refresh()};
+  suitRow.append(back,clear); host.append(rankRow,suitRow);
+}
+function makeStackPresets(inputId,hostId){
+  const host=$(hostId), input=$(inputId); if(!host||!input)return;
+  host.className='preset-row';
+  [10,15,20,25,30,40,50,75,100].forEach(n=>{
+    const b=document.createElement('button'); b.type='button'; b.textContent=n;
+    b.onclick=()=>{input.value=n}; host.appendChild(b);
+  });
+}
+function switchActor(group,current){
+  const next=current==='Hero'?'Villain':'Hero';
+  [...group.children].forEach((b,i)=>b.classList.toggle('sel',(i===0&&next==='Hero')||(i===1&&next==='Villain')));
+  return next;
 }
 function keepInView(el){
   const go=()=>el.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});
@@ -132,7 +191,10 @@ function actorButtons(container,setter){
 actorButtons($('preActor'),x=>preActor=x);
 preActions.forEach(a=>{
   const b=document.createElement('button');b.type='button';b.textContent=a;
-  b.addEventListener('click',()=>{$('pre').value+=($('pre').value?' · ':'')+actorLabel(preActor)+' '+a});
+  b.addEventListener('click',()=>{
+      $('pre').value+=($('pre').value?' · ':'')+actorLabel(preActor)+' '+a;
+      preActor=switchActor($('preActor'),preActor);
+    });
   $('preQuick').appendChild(b);
 });
 $('clearPre').onclick=()=>{$('pre').value=''};
@@ -140,7 +202,7 @@ $('clearPre').onclick=()=>{$('pre').value=''};
 function createStreet(name,id,placeholder){
   const sec=document.createElement('div');sec.className='card';
   sec.innerHTML=`<div class="row" style="justify-content:space-between"><strong>${name}</strong><button class="clear small">Clear</button></div>
-  <div class="label">${name} cards</div><input id="${id}Board" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="${placeholder}">
+  <div class="label">${name} cards</div><input id="${id}Board" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="${placeholder}"><div id="${id}BoardPicker"></div>
   <div class="label">Who acts?</div><div class="actors wrap"></div>
   <div class="label">Action</div><div class="acts wrap"></div>
   <div class="label">Bet size</div><div class="sizes wrap"></div>
@@ -149,12 +211,23 @@ function createStreet(name,id,placeholder){
   const ta=$(id), board=$(id+'Board');
   actorButtons(sec.querySelector('.actors'),x=>streetActors[id]=x);
   postActions.forEach(a=>{const b=document.createElement('button');b.type='button';b.textContent=a;
-    b.onclick=()=>{ta.value+=(ta.value?' · ':'')+actorLabel(streetActors[id])+' '+a};sec.querySelector('.acts').appendChild(b)});
+    b.onclick=()=>{
+      ta.value+=(ta.value?' · ':'')+actorLabel(streetActors[id])+' '+a;
+      streetActors[id]=switchActor(sec.querySelector('.actors'),streetActors[id]);
+    };sec.querySelector('.acts').appendChild(b)});
   betSizes.forEach(s=>{const b=document.createElement('button');b.type='button';b.textContent=s;
     b.onclick=()=>{ta.value+=' '+s};sec.querySelector('.sizes').appendChild(b)});
   sec.querySelector('.clear').onclick=()=>{board.value='';ta.value=''};
 }
 createStreet('Flop','flop','Jh Td 7c'); createStreet('Turn','turn','5c'); createStreet('River','river','2s');
+makeCardPicker('heroCards','heroCardsPicker',2);
+makeCardPicker('flopBoard','flopBoardPicker',3);
+makeCardPicker('turnBoard','turnBoardPicker',1);
+makeCardPicker('riverBoard','riverBoardPicker',1);
+makeCardPicker('villainHand','villainHandPicker',2);
+makeStackPresets('effStack','effStackPresets');
+makeStackPresets('villainStack','villainStackPresets');
+
 toggles($('results'),resultList,x=>result=x);
 
 function txt(id){return $(id).value.trim()}
@@ -178,7 +251,7 @@ function render(){
   });
 }
 function reset(){
-  ['blinds','effStack','villainStack','heroCards','pre','flopBoard','flop','turnBoard','turn','riverBoard','river','villainHand','notes'].forEach(id=>$(id).value='');
+  ['effStack','villainStack','heroCards','pre','flopBoard','flop','turnBoard','turn','riverBoard','river','villainHand','notes'].forEach(id=>$(id).value='');
   heroPos='';villainPos='';result='';preActor='Hero';streetActors.flop=streetActors.turn=streetActors.river='Hero';$('review').checked=false;
   [$('heroPos'),$('villainPos'),$('results')].forEach(c=>[...c.children].forEach(b=>b.classList.remove('sel')));
   [$('preActor'),...document.querySelectorAll('.actors')].forEach(g=>[...g.children].forEach((b,i)=>b.classList.toggle('sel',i===0)));
