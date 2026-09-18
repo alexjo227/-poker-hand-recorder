@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Poker Hands">
-<title>Poker Hand Recorder v4</title>
+<title>Poker Hand Recorder v5</title>
 <style>
 :root{--bg:#0f1115;--card:#171a21;--line:#303541;--text:#f4f5f7;--muted:#aab0bb;--accent:#d7dde8;--accentText:#111318}
 *{box-sizing:border-box}
@@ -34,6 +34,8 @@ pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe 
 .rank-row,.suit-row,.preset-row{display:grid;gap:6px}
 .rank-row{grid-template-columns:repeat(7,minmax(0,1fr));margin-bottom:6px}
 .suit-row{grid-template-columns:repeat(6,minmax(0,1fr))}
+.board-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:10px}
+.board-row .label{margin-top:0}
 .card-picker button,.preset-row button{min-height:40px;padding:6px 4px;font-size:14px}
 .card-picker button.pending{background:var(--accent);color:var(--accentText);border-color:var(--accent)}
 .preset-row{grid-template-columns:repeat(5,minmax(0,1fr));margin-top:8px}
@@ -54,12 +56,18 @@ pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe 
     <label><div class="label">Effective stack (BB)</div><input id="effStack" type="number" inputmode="decimal" placeholder="40"><div id="effStackPresets"></div></label>
   </div>
 
+  <div class="board-row">
+    <label><div class="label">Flop</div><input id="flopBoard" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="AJ5ccs"></label>
+    <label><div class="label">Turn</div><input id="turnBoard" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="Th"></label>
+    <label><div class="label">River</div><input id="riverBoard" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="2d"></label>
+  </div>
+
   <div class="label">Hero position</div><div id="heroPos" class="grid4"></div>
   <div class="label">Villain position</div><div id="villainPos" class="grid4"></div>
 
   <div class="grid2">
     <label><div class="label">Villain stack (optional, BB)</div><input id="villainStack" type="number" inputmode="decimal" placeholder="32"><div id="villainStackPresets"></div></label>
-    <label><div class="label">Hero cards</div><input id="heroCards" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="Kc Qc"><div id="heroCardsPicker"></div></label>
+    <label><div class="label">Hero cards</div><input id="heroCards" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="KQcc"><div id="heroCardsPicker"></div></label>
   </div>
 </div>
 
@@ -74,7 +82,7 @@ pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe 
 
 <div class="card">
   <div class="label">Villain hand (optional)</div>
-  <input id="villainHand" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="As Jh"><div id="villainHandPicker"></div>
+  <input id="villainHand" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="AJsh"><div id="villainHandPicker"></div>
 </div>
 
 <div class="card">
@@ -135,12 +143,21 @@ $('blinds').addEventListener('input',()=>localStorage.setItem('pokerLastBlinds',
 function persist(){localStorage.setItem('pokerHands',JSON.stringify(hands))}
 function actorLabel(actor){return actor==='Hero'?(heroPos||'Hero'):(villainPos||'Villain')}
 function normalizeCards(v){
-  return v.replace(/[CDSHcdsh]/g,m=>m.toLowerCase()).replace(/[akqjt]/g,m=>m.toUpperCase());
+  return v.replace(/\s+/g,'').replace(/[CDSHcdsh]/g,m=>m.toLowerCase()).replace(/[akqjt]/g,m=>m.toUpperCase());
 }
 
 function parseCards(v){
-  const m=(v||'').match(/(?:10|[2-9TJQKA])[cdhs]/gi)||[];
-  return m.map(x=>x.replace(/^10/i,'T').replace(/[akqjt]/i,r=>r.toUpperCase()).replace(/[CDSH]/g,s=>s.toLowerCase()));
+  const clean=normalizeCards(v||'').replace(/10/gi,'T');
+  const paired=clean.match(/(?:[2-9TJQKA][cdhs])+/i);
+  if(paired && paired[0].length===clean.length){
+    return clean.match(/[2-9TJQKA][cdhs]/gi).map(x=>({rank:x[0].toUpperCase(),suit:x[1].toLowerCase()}));
+  }
+  const m=clean.match(/^([2-9TJQKA]+)([cdhs]+)$/i);
+  if(!m || m[1].length!==m[2].length)return [];
+  return [...m[1]].map((rank,i)=>({rank:rank.toUpperCase(),suit:m[2][i].toLowerCase()}));
+}
+function formatCards(cards){
+  return cards.map(c=>c.rank).join('')+cards.map(c=>c.suit).join('');
 }
 function makeCardPicker(inputId, hostId, maxCards){
   const input=$(inputId), host=$(hostId); if(!input||!host)return;
@@ -149,23 +166,23 @@ function makeCardPicker(inputId, hostId, maxCards){
   const suitRow=document.createElement('div'); suitRow.className='suit-row';
   let pending='';
   const ranks=['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
-  const suits=[['♣','c'],['♦','d'],['♥','h'],['♠','s']];
+  const suits=['c','h','s','d'];
   function refresh(){[...rankRow.children].forEach(b=>b.classList.toggle('pending',b.dataset.rank===pending))}
   ranks.forEach(r=>{
     const b=document.createElement('button'); b.type='button'; b.textContent=r; b.dataset.rank=r;
     b.onclick=()=>{pending=r;refresh()}; rankRow.appendChild(b);
   });
-  suits.forEach(([sym,s])=>{
-    const b=document.createElement('button'); b.type='button'; b.textContent=sym;
+  suits.forEach(s=>{
+    const b=document.createElement('button'); b.type='button'; b.textContent=s;
     b.onclick=()=>{
       if(!pending)return;
       const cards=parseCards(input.value); if(cards.length>=maxCards)return;
-      cards.push(pending+s); input.value=cards.join(' '); pending=''; refresh();
+      cards.push({rank:pending,suit:s}); input.value=formatCards(cards); pending=''; refresh();
     };
     suitRow.appendChild(b);
   });
   const back=document.createElement('button'); back.type='button'; back.textContent='⌫';
-  back.onclick=()=>{const cards=parseCards(input.value);cards.pop();input.value=cards.join(' ');pending='';refresh()};
+  back.onclick=()=>{const cards=parseCards(input.value);cards.pop();input.value=formatCards(cards);pending='';refresh()};
   const clear=document.createElement('button'); clear.type='button'; clear.textContent='Clear';
   clear.onclick=()=>{input.value='';pending='';refresh()};
   suitRow.append(back,clear); host.append(rankRow,suitRow);
@@ -220,10 +237,9 @@ preActions.forEach(a=>{
 });
 $('clearPre').onclick=()=>{$('pre').value=''};
 
-function createStreet(name,id,placeholder){
+function createStreet(name,id){
   const sec=document.createElement('div');sec.className='card';
   sec.innerHTML=`<div class="row" style="justify-content:space-between"><strong>${name}</strong><button class="clear small">Clear</button></div>
-  <div class="label">${name} cards</div><input id="${id}Board" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="${placeholder}"><div id="${id}BoardPicker"></div>
   <div class="label">Who acts?</div><div class="actors wrap"></div>
   <div class="label">Action</div><div class="acts wrap"></div>
   <div class="label">Bet size</div><div class="sizes wrap"></div>
@@ -242,11 +258,8 @@ function createStreet(name,id,placeholder){
     b.onclick=()=>{ta.value+=' '+s};sec.querySelector('.sizes').appendChild(b)});
   sec.querySelector('.clear').onclick=()=>{board.value='';ta.value=''};
 }
-createStreet('Flop','flop','Jh Td 7c'); createStreet('Turn','turn','5c'); createStreet('River','river','2s');
+createStreet('Flop','flop'); createStreet('Turn','turn'); createStreet('River','river');
 makeCardPicker('heroCards','heroCardsPicker',2);
-makeCardPicker('flopBoard','flopBoardPicker',3);
-makeCardPicker('turnBoard','turnBoardPicker',1);
-makeCardPicker('riverBoard','riverBoardPicker',1);
 makeCardPicker('villainHand','villainHandPicker',2);
 makeStackPresets('effStack','effStackPresets');
 makeStackPresets('villainStack','villainStackPresets');
@@ -254,12 +267,30 @@ makeStackPresets('villainStack','villainStackPresets');
 toggles($('results'),resultList,x=>result=x);
 
 function txt(id){return $(id).value.trim()}
+function parseChipValue(v){
+  const m=String(v||'').trim().toLowerCase().replace(/,/g,'').match(/^(\d+(?:\.\d+)?)([km])?$/);
+  if(!m)return NaN;
+  return Number(m[1])*(m[2]==='k'?1000:m[2]==='m'?1000000:1);
+}
+function bigBlindFrom(blinds){
+  const parts=String(blinds||'').split('/').map(x=>x.trim()).filter(Boolean);
+  return parts.length>1?parseChipValue(parts[1]):NaN;
+}
+function chips(n,bb){
+  const value=Number(n)*bb;
+  return Number.isFinite(value)?Math.round(value).toLocaleString('en-US'):n+'bb';
+}
+function actionsInChips(value,bb){
+  if(!Number.isFinite(bb))return value;
+  return String(value||'').replace(/(\d+(?:\.\d+)?)\s*bb\b/gi,(_,n)=>chips(n,bb));
+}
 function handText(h,i){
-  let out=`#${i} ${h.blinds?('Blinds '+h.blinds):'Hand'}${h.effStack?(' | '+h.effStack+'bb eff'):''}\n`;
-  out+=`Hero: ${h.heroPos||'?'} ${h.cards||''}${h.effStack?(' ('+h.effStack+'bb)'):''}\n`;
-  out+=`Villain: ${h.villainPos||'?'}${h.villainStack?(' ('+h.villainStack+'bb)'):''}\n`;
-  if(h.pre)out+=`Preflop: ${h.pre}\n`;
-  ['flop','turn','river'].forEach(s=>{if(h[s+'Board']||h[s])out+=`${s[0].toUpperCase()+s.slice(1)}${h[s+'Board']?' ['+h[s+'Board']+']':''}: ${h[s]||''}\n`});
+  const bb=bigBlindFrom(h.blinds);
+  let out=`#${i} ${h.blinds?('Blinds '+h.blinds):'Hand'}${h.effStack?(' | '+chips(h.effStack,bb)+' eff'):''}\n`;
+  out+=`Hero: ${h.heroPos||'?'} ${h.cards||''}${h.effStack?(' ('+chips(h.effStack,bb)+')'):''}\n`;
+  out+=`Villain: ${h.villainPos||'?'}${h.villainStack?(' ('+chips(h.villainStack,bb)+')'):''}\n`;
+  if(h.pre)out+=`Preflop: ${actionsInChips(h.pre,bb)}\n`;
+  ['flop','turn','river'].forEach(s=>{if(h[s+'Board']||h[s])out+=`${s[0].toUpperCase()+s.slice(1)}${h[s+'Board']?' ['+h[s+'Board']+']':''}: ${actionsInChips(h[s]||'',bb)}\n`});
   if(h.villainHand)out+=`Villain hand: ${h.villainHand}\n`; if(h.result)out+=`Result: ${h.result}\n`;
   if(h.notes)out+=`Notes: ${h.notes}\n`; if(h.review)out+='★ REVIEW';
   return out.trim();

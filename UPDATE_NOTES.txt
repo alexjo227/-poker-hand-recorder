@@ -1,6 +1,8 @@
-Poker Hand Recorder v4
+Poker Hand Recorder v5
 New:
-- Flop, Turn, and River now auto-select the player who acts first postflop based on position.
-- Postflop order used: SB, BB, UTG, UTG+1, HJ, CO, BTN.
-- Manual Hero/Villain selection still works as an override.
-- All previous v3 features retained.
+- Flop, Turn, and River fields share one compact row immediately after blinds/stacks.
+- Card notation is rank-first, then suits: AJ5ccs.
+- Suit picker buttons now use c, h, s, d instead of suit icons.
+- Hands are still entered in BB, but saved/exported stacks and typed BB amounts are converted to chips.
+- The second value in the blind level is used as the big blind (500/1k/1k = 1,000 chips per BB).
+- Position-based postflop actor selection and manual override remain.
