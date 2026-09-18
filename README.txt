@@ -21,6 +21,7 @@ Card entry format:
 - Suit letters are c, h, s, and d.
 - Enter the cumulative five-card board in one field: AJK49ccsdh.
 - Saved output splits that into flop AJKccs, turn 4d, and river 9h.
+- The same cards appear live beside the Flop, Turn, and River section headings while recording.
 
 Chip output:
 - Record stack sizes and typed action amounts in BB.

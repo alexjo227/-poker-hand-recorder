@@ -1,5 +1,7 @@
-Poker Hand Recorder v6
+Poker Hand Recorder v7
 New:
+- Each postflop section now shows its cards live beside Flop, Turn, or River.
+- Street labels remain blank until the relevant board cards have been entered.
 - The entire five-card board uses one cumulative field immediately below the blinds and above effective stack.
 - The board's rank and suit picker is directly below that field.
 - Enter the full board as ranks first, then suits: AJK49ccsdh.
