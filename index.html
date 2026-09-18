@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Poker Hands">
-<title>Poker Hand Recorder v5</title>
+<title>Poker Hand Recorder v6</title>
 <style>
 :root{--bg:#0f1115;--card:#171a21;--line:#303541;--text:#f4f5f7;--muted:#aab0bb;--accent:#d7dde8;--accentText:#111318}
 *{box-sizing:border-box}
@@ -34,8 +34,6 @@ pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe 
 .rank-row,.suit-row,.preset-row{display:grid;gap:6px}
 .rank-row{grid-template-columns:repeat(7,minmax(0,1fr));margin-bottom:6px}
 .suit-row{grid-template-columns:repeat(6,minmax(0,1fr))}
-.board-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:10px}
-.board-row .label{margin-top:0}
 .card-picker button,.preset-row button{min-height:40px;padding:6px 4px;font-size:14px}
 .card-picker button.pending{background:var(--accent);color:var(--accentText);border-color:var(--accent)}
 .preset-row{grid-template-columns:repeat(5,minmax(0,1fr));margin-top:8px}
@@ -51,16 +49,12 @@ pre{white-space:pre-wrap;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe 
 </header>
 
 <div class="card">
-  <div class="grid2">
-    <label><div class="label">Blinds / level</div><input id="blinds" placeholder="500/1k/1k"></label>
-    <label><div class="label">Effective stack (BB)</div><input id="effStack" type="number" inputmode="decimal" placeholder="40"><div id="effStackPresets"></div></label>
-  </div>
+  <label><div class="label">Blinds / level</div><input id="blinds" placeholder="500/1k/1k"></label>
 
-  <div class="board-row">
-    <label><div class="label">Flop</div><input id="flopBoard" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="AJ5ccs"></label>
-    <label><div class="label">Turn</div><input id="turnBoard" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="Th"></label>
-    <label><div class="label">River</div><input id="riverBoard" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="2d"></label>
-  </div>
+  <label><div class="label">Board</div><input id="board" class="cardInput" autocomplete="off" autocapitalize="none" placeholder="AJK49ccsdh"></label>
+  <div id="boardPicker"></div>
+
+  <label><div class="label">Effective stack (BB)</div><input id="effStack" type="number" inputmode="decimal" placeholder="40"><div id="effStackPresets"></div></label>
 
   <div class="label">Hero position</div><div id="heroPos" class="grid4"></div>
   <div class="label">Villain position</div><div id="villainPos" class="grid4"></div>
@@ -152,39 +146,56 @@ function parseCards(v){
   if(paired && paired[0].length===clean.length){
     return clean.match(/[2-9TJQKA][cdhs]/gi).map(x=>({rank:x[0].toUpperCase(),suit:x[1].toLowerCase()}));
   }
-  const m=clean.match(/^([2-9TJQKA]+)([cdhs]+)$/i);
+  const m=clean.match(/^([2-9TJQKA]+)([cdhs]*)$/i);
   if(!m || m[1].length!==m[2].length)return [];
   return [...m[1]].map((rank,i)=>({rank:rank.toUpperCase(),suit:m[2][i].toLowerCase()}));
 }
 function formatCards(cards){
   return cards.map(c=>c.rank).join('')+cards.map(c=>c.suit).join('');
 }
+function cardParts(v){
+  const clean=normalizeCards(v||'').replace(/10/gi,'T');
+  const paired=clean.match(/^(?:[2-9TJQKA][cdhs])+$/i);
+  if(paired){
+    const cards=clean.match(/[2-9TJQKA][cdhs]/gi);
+    return {ranks:cards.map(x=>x[0].toUpperCase()),suits:cards.map(x=>x[1].toLowerCase())};
+  }
+  const m=clean.match(/^([2-9TJQKA]*)([cdhs]*)$/i);
+  if(!m)return {ranks:[],suits:[]};
+  return {ranks:[...m[1].toUpperCase()],suits:[...m[2].toLowerCase()]};
+}
+function formatCardParts(parts){return parts.ranks.join('')+parts.suits.join('')}
+function splitBoard(v){
+  const cards=parseCards(v).slice(0,5);
+  return {
+    flopBoard:formatCards(cards.slice(0,3)),
+    turnBoard:formatCards(cards.slice(3,4)),
+    riverBoard:formatCards(cards.slice(4,5))
+  };
+}
 function makeCardPicker(inputId, hostId, maxCards){
   const input=$(inputId), host=$(hostId); if(!input||!host)return;
   host.className='card-picker';
   const rankRow=document.createElement('div'); rankRow.className='rank-row';
   const suitRow=document.createElement('div'); suitRow.className='suit-row';
-  let pending='';
   const ranks=['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
   const suits=['c','h','s','d'];
-  function refresh(){[...rankRow.children].forEach(b=>b.classList.toggle('pending',b.dataset.rank===pending))}
   ranks.forEach(r=>{
     const b=document.createElement('button'); b.type='button'; b.textContent=r; b.dataset.rank=r;
-    b.onclick=()=>{pending=r;refresh()}; rankRow.appendChild(b);
+    b.onclick=()=>{const parts=cardParts(input.value);if(parts.ranks.length>=maxCards)return;parts.ranks.push(r);input.value=formatCardParts(parts)}; rankRow.appendChild(b);
   });
   suits.forEach(s=>{
     const b=document.createElement('button'); b.type='button'; b.textContent=s;
     b.onclick=()=>{
-      if(!pending)return;
-      const cards=parseCards(input.value); if(cards.length>=maxCards)return;
-      cards.push({rank:pending,suit:s}); input.value=formatCards(cards); pending=''; refresh();
+      const parts=cardParts(input.value); if(parts.suits.length>=parts.ranks.length)return;
+      parts.suits.push(s); input.value=formatCardParts(parts);
     };
     suitRow.appendChild(b);
   });
   const back=document.createElement('button'); back.type='button'; back.textContent='⌫';
-  back.onclick=()=>{const cards=parseCards(input.value);cards.pop();input.value=formatCards(cards);pending='';refresh()};
+  back.onclick=()=>{const parts=cardParts(input.value);if(parts.suits.length)parts.suits.pop();else parts.ranks.pop();input.value=formatCardParts(parts)};
   const clear=document.createElement('button'); clear.type='button'; clear.textContent='Clear';
-  clear.onclick=()=>{input.value='';pending='';refresh()};
+  clear.onclick=()=>{input.value=''};
   suitRow.append(back,clear); host.append(rankRow,suitRow);
 }
 function makeStackPresets(inputId,hostId){
@@ -245,7 +256,7 @@ function createStreet(name,id){
   <div class="label">Bet size</div><div class="sizes wrap"></div>
   <div class="label">Actions</div><textarea id="${id}" rows="2"></textarea>`;
   $('streetWrap').appendChild(sec);
-  const ta=$(id), board=$(id+'Board');
+  const ta=$(id);
   actorButtons(sec.querySelector('.actors'),x=>streetActors[id]=x);
   streetActors[id]=firstPostflopActor();
   setActorGroup(sec.querySelector('.actors'),streetActors[id]);
@@ -256,9 +267,10 @@ function createStreet(name,id){
     };sec.querySelector('.acts').appendChild(b)});
   betSizes.forEach(s=>{const b=document.createElement('button');b.type='button';b.textContent=s;
     b.onclick=()=>{ta.value+=' '+s};sec.querySelector('.sizes').appendChild(b)});
-  sec.querySelector('.clear').onclick=()=>{board.value='';ta.value=''};
+  sec.querySelector('.clear').onclick=()=>{ta.value=''};
 }
 createStreet('Flop','flop'); createStreet('Turn','turn'); createStreet('River','river');
+makeCardPicker('board','boardPicker',5);
 makeCardPicker('heroCards','heroCardsPicker',2);
 makeCardPicker('villainHand','villainHandPicker',2);
 makeStackPresets('effStack','effStackPresets');
@@ -305,17 +317,18 @@ function render(){
   });
 }
 function reset(){
-  ['effStack','villainStack','heroCards','pre','flopBoard','flop','turnBoard','turn','riverBoard','river','villainHand','notes'].forEach(id=>$(id).value='');
+  ['board','effStack','villainStack','heroCards','pre','flop','turn','river','villainHand','notes'].forEach(id=>$(id).value='');
   heroPos='';villainPos='';result='';preActor='Hero';streetActors.flop=streetActors.turn=streetActors.river='Hero';$('review').checked=false;
   [$('heroPos'),$('villainPos'),$('results')].forEach(c=>[...c.children].forEach(b=>b.classList.remove('sel')));
   [$('preActor'),...document.querySelectorAll('.actors')].forEach(g=>[...g.children].forEach((b,i)=>b.classList.toggle('sel',i===0)));
 }
 $('newHand').onclick=reset;
 $('save').onclick=()=>{
+  const streets=splitBoard(txt('board'));
   const h={blinds:txt('blinds'),effStack:txt('effStack'),villainStack:txt('villainStack'),heroPos,villainPos,cards:normalizeCards(txt('heroCards')),
-    pre:txt('pre'),flopBoard:normalizeCards(txt('flopBoard')),flop:txt('flop'),turnBoard:normalizeCards(txt('turnBoard')),turn:txt('turn'),
-    riverBoard:normalizeCards(txt('riverBoard')),river:txt('river'),villainHand:normalizeCards(txt('villainHand')),result,notes:txt('notes'),review:$('review').checked};
-  if(!h.cards&&!h.pre&&!h.flop&&!h.turn&&!h.river){$('status').textContent='Add cards or some action before saving.';return}
+    board:normalizeCards(txt('board')),pre:txt('pre'),flopBoard:streets.flopBoard,flop:txt('flop'),turnBoard:streets.turnBoard,turn:txt('turn'),
+    riverBoard:streets.riverBoard,river:txt('river'),villainHand:normalizeCards(txt('villainHand')),result,notes:txt('notes'),review:$('review').checked};
+  if(!h.cards&&!h.board&&!h.pre&&!h.flop&&!h.turn&&!h.river){$('status').textContent='Add cards or some action before saving.';return}
   hands.push(h);persist();render();reset();$('status').textContent='Hand saved.';
 };
 $('export').onclick=()=>{

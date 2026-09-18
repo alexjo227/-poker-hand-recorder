@@ -1,6 +1,9 @@
-Poker Hand Recorder v5
+Poker Hand Recorder v6
 New:
-- Flop, Turn, and River fields share one compact row immediately after blinds/stacks.
+- The entire five-card board uses one cumulative field immediately below the blinds and above effective stack.
+- The board's rank and suit picker is directly below that field.
+- Enter the full board as ranks first, then suits: AJK49ccsdh.
+- Saved output automatically separates the first three cards as the flop, fourth as the turn, and fifth as the river.
 - Card notation is rank-first, then suits: AJ5ccs.
 - Suit picker buttons now use c, h, s, d instead of suit icons.
 - Hands are still entered in BB, but saved/exported stacks and typed BB amounts are converted to chips.

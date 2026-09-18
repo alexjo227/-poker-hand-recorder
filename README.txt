@@ -19,6 +19,8 @@ The app stores saved hands locally on the device using browser storage and can w
 Card entry format:
 - Enter ranks first, followed by suits: AJ5ccs.
 - Suit letters are c, h, s, and d.
+- Enter the cumulative five-card board in one field: AJK49ccsdh.
+- Saved output splits that into flop AJKccs, turn 4d, and river 9h.
 
 Chip output:
 - Record stack sizes and typed action amounts in BB.
